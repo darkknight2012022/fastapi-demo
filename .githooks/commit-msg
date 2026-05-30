@@ -1,0 +1,10 @@
+#!/bin/sh
+MSG=$(cat "$1")
+PATTERN="^(feat|fix|docs|style|refactor|test|ci|chore|perf)(\(.+\))?: .{1,72}$"
+if ! echo "$MSG" | grep -qE "$PATTERN"; then
+  echo "❌ commit message 不符合规范！"
+  echo "   格式：type(scope): description"
+  echo "   type 必须是：feat|fix|docs|style|refactor|test|ci|chore|perf"
+  echo "   例如：feat(auth): add JWT refresh token"
+  exit 1
+fi
