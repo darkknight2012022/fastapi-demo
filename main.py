@@ -1,3 +1,8 @@
+from fastapi import Depends
+from prometheus_fastapi_instrumentator import Instrumentator
+from datetime import timedelta
+from jose import JWTError, jwt
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
@@ -6,6 +11,7 @@ from typing import Optional, List
 app = FastAPI(title="Trading API", version="1.0.0")
 
 trades_db = []
+
 
 class TradeCreate(BaseModel):
     symbol: str = Field(..., min_length=2, max_length=10, example="BTC")
@@ -23,6 +29,7 @@ class TradeCreate(BaseModel):
     def symbol_uppercase(cls, v):
         return v.upper()
 
+
 class TradeResponse(BaseModel):
     id: int
     symbol: str
@@ -32,13 +39,16 @@ class TradeResponse(BaseModel):
     total_value: float
     created_at: str
 
+
 @app.get("/")
 def root():
     return {"status": "ok", "time": datetime.now().isoformat()}
 
+
 @app.get("/health")
 def health():
     return {"healthy": True, "trades_count": len(trades_db)}
+
 
 @app.post("/trades", response_model=TradeResponse, status_code=201)
 def create_trade(trade: TradeCreate):
@@ -55,11 +65,13 @@ def create_trade(trade: TradeCreate):
     trades_db.append(new_trade)
     return new_trade
 
+
 @app.get("/trades", response_model=List[TradeResponse])
 def get_trades(symbol: Optional[str] = None):
     if symbol:
         return [t for t in trades_db if t["symbol"] == symbol.upper()]
     return trades_db
+
 
 @app.get("/trades/{trade_id}", response_model=TradeResponse)
 def get_trade(trade_id: int):
@@ -68,10 +80,6 @@ def get_trade(trade_id: int):
             return trade
     raise HTTPException(status_code=404, detail=f"交易 {trade_id} 不存在")
 
-from fastapi import Depends
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
-from datetime import timedelta
 
 SECRET_KEY = "dev-secret-key-change-in-production"
 ALGORITHM = "HS256"
@@ -83,10 +91,12 @@ fake_users = {
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
+
 def create_token(data: dict):
     expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE)
     data.update({"exp": expire})
     return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
@@ -98,6 +108,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=401, detail="token 已过期或无效")
 
+
 @app.post("/login")
 def login(form: OAuth2PasswordRequestForm = Depends()):
     user = fake_users.get(form.username)
@@ -106,6 +117,11 @@ def login(form: OAuth2PasswordRequestForm = Depends()):
     token = create_token({"sub": form.username})
     return {"access_token": token, "token_type": "bearer"}
 
+
 @app.get("/me")
 def get_me(current_user: str = Depends(get_current_user)):
     return {"username": current_user, "message": "鉴权成功！"}
+
+
+# ── 监控指标 ──
+Instrumentator().instrument(app).expose(app)
